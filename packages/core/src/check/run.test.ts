@@ -6,7 +6,7 @@ import { computeDigests } from "../fetch/digests.js";
 import type { ReleaseArtifact } from "../fetch/types.js";
 import type { ProvenanceResult } from "../provenance/types.js";
 import type { RebuildResult } from "../rebuild/run.js";
-import { type CheckDeps, runCheck } from "./run.js";
+import { type CheckDeps, chooseSource, runCheck } from "./run.js";
 
 async function artifactFor(fixture: string): Promise<ReleaseArtifact> {
   const tarball = await packFixture(fixture);
@@ -343,5 +343,93 @@ describe("runCheck with a staged version", () => {
     await expect(runCheck({}, depsFor({ release: "clean" }))).rejects.toThrow(
       /Give a package as <name>@<version>, or --stage <id>/,
     );
+  });
+});
+
+describe("chooseSource", () => {
+  const namedRepo = "https://github.com/other/named-repo";
+  const upperCommit = "B".repeat(40);
+  const lowerCommit = "b".repeat(40);
+
+  it.each([
+    {
+      label: "verified provenance plus --commit prefers provenance commit with verified: true",
+      provenance: verifiedProvenance(),
+      options: { repository: namedRepo, commit: upperCommit },
+      expected: {
+        repository: FIXTURE_REPOSITORY,
+        commit: "a".repeat(40),
+        verified: true,
+      },
+    },
+    {
+      label: "missing provenance plus --repo and --commit returns lower-cased named source with verified: false",
+      provenance: missing,
+      options: { repository: `${namedRepo}.git/`, commit: upperCommit },
+      expected: {
+        repository: namedRepo,
+        commit: lowerCommit,
+        verified: false,
+      },
+    },
+    {
+      label: "invalid provenance with --repo and --commit returns named source, never verified: true",
+      provenance: verifiedProvenance({
+        status: "invalid",
+        problems: ["signature check failed"],
+      }),
+      options: { repository: namedRepo, commit: upperCommit },
+      expected: {
+        repository: namedRepo,
+        commit: lowerCommit,
+        verified: false,
+      },
+    },
+    {
+      label: "unsupported provenance with --repo and --commit returns named source, never verified: true",
+      provenance: verifiedProvenance({
+        status: "unsupported",
+        problems: ["unsupported issuer"],
+      }),
+      options: { repository: namedRepo, commit: upperCommit },
+      expected: {
+        repository: namedRepo,
+        commit: lowerCommit,
+        verified: false,
+      },
+    },
+  ])("$label", ({ provenance, options, expected }) => {
+    const result = chooseSource(provenance, options);
+    expect(result).toBeDefined();
+    expect(result?.repository).toBe(expected.repository);
+    expect(result?.commit).toBe(expected.commit);
+    expect(result?.verified).toBe(expected.verified);
+  });
+
+  it("returns undefined for --repo alone or when neither provenance nor --commit is provided", () => {
+    expect(chooseSource(missing, { repository: namedRepo })).toBeUndefined();
+    expect(chooseSource(missing, {})).toBeUndefined();
+  });
+
+  it("throws ToolError naming --repo when --commit is given without --repo", () => {
+    expect(() => chooseSource(missing, { commit: lowerCommit })).toThrow(ToolError);
+    expect(() => chooseSource(missing, { commit: lowerCommit })).toThrow(/--repo/);
+  });
+
+  it("throws ToolError when verified provenance has a repository that fails validateSource", () => {
+    const badProvenance = verifiedProvenance({
+      source: {
+        repository: "https://gitlab.com/not-github/repo",
+        commit: "a".repeat(40),
+        ref: "refs/tags/v1.0.0",
+        workflowPath: ".github/workflows/release.yml",
+        workflowRef: "refs/tags/v1.0.0",
+        trigger: "push",
+        runnerEnvironment: "github-hosted",
+      },
+    });
+    expect(() =>
+      chooseSource(badProvenance, { repository: namedRepo, commit: lowerCommit }),
+    ).toThrow(ToolError);
   });
 });
