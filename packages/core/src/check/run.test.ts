@@ -363,7 +363,8 @@ describe("chooseSource", () => {
       },
     },
     {
-      label: "missing provenance plus --repo and --commit returns lower-cased named source with verified: false",
+      label:
+        "missing provenance plus --repo and --commit returns lower-cased named source with verified: false",
       provenance: missing,
       options: { repository: `${namedRepo}.git/`, commit: upperCommit },
       expected: {
@@ -373,7 +374,8 @@ describe("chooseSource", () => {
       },
     },
     {
-      label: "invalid provenance with --repo and --commit returns named source, never verified: true",
+      label:
+        "invalid provenance with --repo and --commit returns named source, never verified: true",
       provenance: verifiedProvenance({
         status: "invalid",
         problems: ["signature check failed"],
@@ -386,7 +388,8 @@ describe("chooseSource", () => {
       },
     },
     {
-      label: "unsupported provenance with --repo and --commit returns named source, never verified: true",
+      label:
+        "unsupported provenance with --repo and --commit returns named source, never verified: true",
       provenance: verifiedProvenance({
         status: "unsupported",
         problems: ["unsupported issuer"],
